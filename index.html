@@ -65,6 +65,10 @@ footer p { margin-top: 12px; font-size: 12px; color: var(--doux); line-height: 1
 .lot .t { font-family: Anton, Impact, sans-serif; font-size: 25px; letter-spacing: .02em; color: #fff; }
 .lot .s { font-size: 13px; color: #f2dcff; margin-top: 4px; line-height: 1.4; }
 .lot .cd { display: inline-block; margin-top: 8px; padding: 6px 14px; border-radius: 30px; background: rgba(0,0,0,.35); font-weight: 800; font-size: 14px; color: var(--or); font-variant-numeric: tabular-nums; }
+.tir { margin: 0 0 14px; padding: 14px; border-radius: 18px; text-align: center; background: linear-gradient(135deg, rgba(120,40,0,.92), rgba(170,20,40,.9)); border: 2px solid #ffc86a; box-shadow: 0 0 22px rgba(255,140,40,.4); }
+.tir .t { font-family: Anton, Impact, sans-serif; font-size: 23px; color: #fff; } .tir .s { font-size: 12.5px; color: #ffe6cc; margin-top: 4px; line-height: 1.45; }
+.tir .w { display: flex; gap: 8px; margin-top: 10px; } .tir .w > div { flex: 1; background: rgba(0,0,0,.3); border-radius: 12px; padding: 8px 6px; font-size: 12px; color: #ffe6cc; } .tir .w b { display: block; font-size: 14px; color: var(--or); overflow-wrap: anywhere; }
+.hc { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 10px; font-size: 10.5px; font-weight: 800; background: rgba(255,210,63,.18); color: var(--or); border: 1px solid rgba(255,210,63,.5); }
 .gagnants { margin-top: 18px; } .gagnants h2 { font-family: Anton, Impact, sans-serif; font-weight: 400; font-size: 22px; color: var(--or); margin-bottom: 8px; text-align: center; }
 @media (max-width: 380px) { h1 { font-size: 38px; } header img { width: 88px; height: 88px; } .pod .nm { font-size: 12px; } }
 </style>
@@ -78,6 +82,7 @@ footer p { margin-top: 12px; font-size: 12px; color: var(--doux); line-height: 1
   </header>
   <nav class="tabs"><a href="#semaine" id="t-semaine">🎁 Semaine</a><a href="#live" id="t-live">🔥 Dernier live</a><a href="#general" id="t-general">🏆 Général</a></nav>
   <div class="lot" id="lot" hidden></div>
+  <div class="tir" id="tir" hidden></div>
   <div class="info" id="info"></div>
   <div class="chips" id="chips"></div>
   <div class="podium" id="podium"></div>
@@ -99,26 +104,32 @@ const clean = s => (String(s).replace(/[￰-￿​⁠]/g, '').trim() || '(pseudo
 const COLS = ['#e8432b', '#d4256f', '#8a2be2', '#1f6fe0', '#0fa37f', '#e08a00', '#b8326a'];
 const bulle = (r) => { const src = (DATA.av || {})[r.h]; if (src) return `<img class="bulle" alt="" src="${src}">`; const n = clean(r.p).replace(/[^\p{L}\p{N}]/gu, ''); let k = 0; for (const ch of String(r.h || r.p)) k = (k * 31 + ch.codePointAt(0)) % 997; return `<div class="bulle" style="background:${COLS[k % COLS.length]}">${esc((n[0] || '?').toUpperCase())}</div>`; };
 const tt = r => r.h ? `<div class="tt">@${esc(r.h)}</div>` : '';
+// RoiNémir et ROI IA ne comptent que dans le classement général (pas de Galaxie, pas de tirage)
+const HC = ['souvientmoi007', 'duoboostagency974'], HCN = ['roinemir', 'roiia'];
+const nrm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const horsC = r => (DATA.hc || HC).includes(String(r.h || '').toLowerCase()) || HCN.includes(nrm(r.p));
 const jour = s => { const [d, m, y] = String(s).split('/').map(Number); return new Date(y, m - 1, d); };
 // semaine du concours : du dimanche au samedi ; la GALAXIE est remise au n°1 le dimanche suivant, en live
 const dimancheDe = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + 7 - x.getDay()); return x; };
-const cle = d => d.toISOString().slice(0, 10), joli = d => d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const cle = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, joli = d => d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 function cumul(lives) { const m = new Map(); for (const L of lives) for (const [p, pts, ko, v, c, h] of L.rows) { const key = h || p; const x = m.get(key) || { p, h, pts: 0, ko: 0, v: 0, c: 0, lives: 0 }; x.p = p; x.pts += pts; x.ko += ko; x.v += v; x.c += c; x.lives++; m.set(key, x); } return [...m.values()].sort((a, b) => b.pts - a.pts || b.ko - a.ko); }
 function vue() { const v = ['#live', '#general'].includes(location.hash) ? location.hash.slice(1) : 'semaine'; for (const k of ['semaine', 'live', 'general']) $('t-' + k).classList.toggle('on', k === v); return v; }
 const chips = a => a.map(([b, s]) => `<div class="chip"><b>${b}</b><span>${s}</span></div>`).join('');
 let rows = [], montre = 50, cdT = null;
 function render() {
-  const v = vue(), last = DATA.lives[DATA.lives.length - 1]; clearInterval(cdT); $('lot').hidden = v !== 'semaine'; $('gagnants').hidden = v !== 'semaine';
+  const v = vue(), last = DATA.lives[DATA.lives.length - 1]; clearInterval(cdT); $('lot').hidden = v !== 'semaine'; $('tir').hidden = v !== 'semaine'; $('gagnants').hidden = v !== 'semaine';
   if (!last) { $('info').textContent = 'Le classement arrive après le premier live !'; return; }
   if (v === 'semaine') { const dim = dimancheDe(new Date()), deb = new Date(dim); deb.setDate(deb.getDate() - 7);
-    const lives = DATA.lives.filter(L => cle(dimancheDe(jour(L.date))) === cle(dim)); rows = cumul(lives);
+    const lives = DATA.lives.filter(L => cle(dimancheDe(jour(L.date))) === cle(dim)); rows = cumul(lives).filter(r => !horsC(r));
     $('lot').innerHTML = `<div class="t">🌌 UNE GALAXIE À GAGNER 🌌</div><div class="s">Le n°1 de la semaine reçoit une <b>Galaxie</b> en live le <b>${joli(dim)}</b>.<br>Lives comptés : du ${joli(deb)} au samedi soir.</div><div class="cd" id="cd"></div>`;
     const tick = () => { const fin = new Date(dim); fin.setHours(0, 0, 0, 0); const ms = fin - Date.now(); $('cd') && ($('cd').textContent = ms > 0 ? `⏳ Fin de la semaine dans ${Math.floor(ms / 864e5)} j ${Math.floor(ms / 36e5) % 24} h ${Math.floor(ms / 6e4) % 60} min` : '🎁 Remise de la Galaxie ce soir en live !'); }; tick(); cdT = setInterval(tick, 30000);
+    const T = (DATA.tirages || {})[cle(dim)] || {}, nTir = Math.max(0, rows.length - 1), wn = x => x ? `<b>${esc(clean(x.p))}</b>${x.h ? '@' + esc(x.h) : ''}` : '<b>—</b>à venir';
+    $('tir').innerHTML = `<div class="t">🎟️ 2 TIRAGES AU SORT · 🔫 1 PISTOLET PAR TIRAGE</div><div class="s">Tous les joueurs de la semaine participent, <b>sauf le n°1</b> (il gagne la Galaxie). Le gagnant du 1er tirage ne participe pas au 2e. Tirages en live le <b>${joli(dim)}</b>.<br>Déjà <b>${nTir}</b> joueur${nTir > 1 ? 's' : ''} dans le tirage cette semaine.</div><div class="w"><div>Tirage n°1${wn(T.t1)}</div><div>Tirage n°2${wn(T.t2)}</div></div>`;
     $('info').textContent = `${lives.length} live${lives.length > 1 ? 's' : ''} cette semaine${DATA.maj ? ' · mis à jour le ' + DATA.maj : ''}`;
     $('chips').innerHTML = chips([[rows.length, 'joueurs'], [lives.length, 'lives'], [fmt(rows.reduce((a, r) => a + r.ko, 0)), 'KO'], [fmt(rows.reduce((a, r) => a + r.c, 0)), 'cœurs ❤️']]);
     const sem = new Map(); for (const L of DATA.lives) { const k = cle(dimancheDe(jour(L.date))); if (k < cle(dim) || (k === cle(dim) && false)) (sem.get(k) || sem.set(k, []).get(k)).push(L); }
-    const g = [...sem.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, Ls]) => { const w = cumul(Ls)[0]; return w ? `<div class="ligne"><div class="n">🌌</div><div class="who">${bulle(w)}<div><div class="nm">${esc(clean(w.p))}</div>${tt(w)}<div class="st">Galaxie du ${new Date(k + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</div></div></div><div class="pt">${fmt(w.pts)}<small>points</small></div></div>` : ''; }).join('');
-    $('gagnants').innerHTML = g ? `<h2>🏆 LES GAGNANTS DE LA GALAXIE</h2><div class="liste">${g}</div>` : ''; }
+    const g = [...sem.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, Ls]) => { const w = cumul(Ls).filter(r => !horsC(r))[0]; return w ? `<div class="ligne"><div class="n">🌌</div><div class="who">${bulle(w)}<div><div class="nm">${esc(clean(w.p))}</div>${tt(w)}<div class="st">Galaxie du ${new Date(k + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}${(() => { const T = (DATA.tirages || {})[k] || {}; const l = [T.t1, T.t2].filter(Boolean).map(x => '🔫 ' + esc(clean(x.p))); return l.length ? '<br>' + l.join(' · ') : ''; })()}</div></div></div><div class="pt">${fmt(w.pts)}<small>points</small></div></div>` : ''; }).join('');
+    $('gagnants').innerHTML = g ? `<h2>🏆 LES GAGNANTS DE LA SEMAINE</h2><div class="liste">${g}</div>` : ''; }
   else if (v === 'live') { rows = last.rows.map(([p, pts, ko, vic, c, h]) => ({ p, h, pts, ko, v: vic, c }));
     $('info').textContent = `Live du ${last.date} · ${last.debut} → ${last.fin}`;
     $('chips').innerHTML = chips([[last.joueurs, 'joueurs'], [last.manches, 'manches'], [fmt(last.coeurs), 'cœurs ❤️'], [last.partages, 'partages']]); }
@@ -127,11 +138,11 @@ function render() {
     $('chips').innerHTML = chips([[rows.length, 'joueurs'], [nb, nb > 1 ? 'lives' : 'live'], [fmt(rows.reduce((a, r) => a + r.ko, 0)), 'KO'], [fmt(rows.reduce((a, r) => a + r.c, 0)), 'cœurs ❤️']]); }
   rows.forEach((r, i) => r.rk = i + 1);
   const pod = [[1, 'p2', '🥈'], [0, 'p1', v === 'semaine' ? '🌌' : '👑'], [2, 'p3', '🥉']];
-  $('podium').innerHTML = rows.length ? pod.map(([k, cl, ic]) => { const r = rows[k]; if (!r) return '<div></div>'; return `<div class="pod ${cl}"><div class="ic">${ic}</div><div class="rk">#${k + 1}</div>${bulle(r)}<div class="nm">${esc(clean(r.p))}</div>${tt(r)}<div class="pt">${fmt(r.pts)} pts</div><div class="st">⚔️ ${r.ko} KO · ❤️ ${fmt(r.c)}</div></div>`; }).join('') : '';
+  $('podium').innerHTML = rows.length ? pod.map(([k, cl, ic]) => { const r = rows[k]; if (!r) return '<div></div>'; return `<div class="pod ${cl}"><div class="ic">${ic}</div><div class="rk">#${k + 1}</div>${bulle(r)}<div class="nm">${esc(clean(r.p))}</div>${v === 'general' && horsC(r) ? '<span class="hc">👑 hors concours</span>' : ''}${tt(r)}<div class="pt">${fmt(r.pts)} pts</div><div class="st">⚔️ ${r.ko} KO · ❤️ ${fmt(r.c)}</div></div>`; }).join('') : '';
   liste(); }
-function liste() { const q = $('q').value.trim().toLowerCase(); let L = q ? rows.filter(r => clean(r.p).toLowerCase().includes(q) || String(r.h || '').toLowerCase().includes(q.replace(/^@/, ''))) : rows.slice(3);
+function liste() { const v0 = vue(); const q = $('q').value.trim().toLowerCase(); let L = q ? rows.filter(r => clean(r.p).toLowerCase().includes(q) || String(r.h || '').toLowerCase().includes(q.replace(/^@/, ''))) : rows.slice(3);
   const tot = L.length; if (!q) L = L.slice(0, montre);
-  $('liste').innerHTML = L.length ? L.map(r => `<div class="ligne${q ? ' moi' : ''}"><div class="n">${r.rk}</div><div class="who">${bulle(r)}<div><div class="nm">${esc(clean(r.p))}</div>${tt(r)}<div class="st">⚔️ ${r.ko} KO${r.v ? ` · 🏆 ${r.v} victoire${r.v > 1 ? 's' : ''}` : ''} · ❤️ ${fmt(r.c)}${r.lives > 1 ? ` · ${r.lives} lives` : ''}</div></div></div><div class="pt">${fmt(r.pts)}<small>points</small></div></div>`).join('') : (rows.length ? '<div class="vide">Aucun joueur avec ce pseudo… viens jouer au prochain live ! 🔥</div>' : '<div class="vide">La semaine commence : viens jouer au prochain live pour prendre la 1re place ! 🔥</div>');
+  $('liste').innerHTML = L.length ? L.map(r => `<div class="ligne${q ? ' moi' : ''}"><div class="n">${r.rk}</div><div class="who">${bulle(r)}<div><div class="nm">${esc(clean(r.p))}${v0 === 'general' && horsC(r) ? '<span class="hc">👑 hors concours</span>' : ''}</div>${tt(r)}<div class="st">⚔️ ${r.ko} KO${r.v ? ` · 🏆 ${r.v} victoire${r.v > 1 ? 's' : ''}` : ''} · ❤️ ${fmt(r.c)}${r.lives > 1 ? ` · ${r.lives} lives` : ''}</div></div></div><div class="pt">${fmt(r.pts)}<small>points</small></div></div>`).join('') : (rows.length ? '<div class="vide">Aucun joueur avec ce pseudo… viens jouer au prochain live ! 🔥</div>' : '<div class="vide">La semaine commence : viens jouer au prochain live pour prendre la 1re place ! 🔥</div>');
   $('plus').hidden = !!q || tot <= montre; }
 $('q').addEventListener('input', liste);
 $('plus').addEventListener('click', () => { montre = 1e9; liste(); });
